@@ -1,13 +1,19 @@
+mod scene;
+
 use anyhow::{anyhow, Context};
 use bytes::Buf;
-use glam::{uvec2, Vec2};
+use glam::{Vec2, uvec2, vec2};
 use inox2d::formats::inp::parse_inp;
-use inox2d::{model::Model, renderers::wgpu::Renderer};
+use inox2d::{model::Model, render::wgpu::Renderer};
 use log::{debug, info};
 use wgpu::CompositeAlphaMode;
+use winit::event::{KeyboardInput, Event, WindowEvent, VirtualKeyCode, ElementState};
+use winit::event_loop::ControlFlow;
 use winit::platform::web::WindowExtWebSys;
 use winit::window::Window;
 use winit::{event_loop::EventLoop, window::WindowBuilder};
+
+use crate::scene::ExampleSceneController;
 
 fn main() {
     wasm_logger::init(wasm_logger::Config::new(log::Level::Info));
@@ -92,8 +98,63 @@ async fn run() -> anyhow::Result<()> {
         }
     }
 
-    event_loop.run(move |event, _, control_flow| {
-        // handle events
+    let mut renderer = Renderer::new(
+        &device,
+        &queue,
+        wgpu::TextureFormat::Bgra8Unorm,
+        &model,
+        uvec2(window.inner_size().width, window.inner_size().height),
+    );
+    renderer.camera.scale = Vec2::splat(0.15);
+    let mut scene_ctrl = ExampleSceneController::new(&renderer.camera, 0.5);
+    let mut puppet = model.puppet;
+
+    event_loop.run(move |event, _, control_flow| match event {
+        Event::RedrawRequested(_) => {
+            scene_ctrl.update(&mut renderer.camera);
+
+            puppet.begin_set_params();
+            let t = scene_ctrl.current_elapsed();
+            //puppet.set_param("Head:: Yaw-Pitch", vec2(t.cos(), t.sin()));
+            puppet.end_set_params();
+
+            let output = surface.get_current_texture().unwrap();
+            let view = (output.texture).create_view(&wgpu::TextureViewDescriptor::default());
+
+            renderer.render(&queue, &device, &puppet, &view);
+            output.present();
+        }
+        Event::WindowEvent { ref event, .. } => match event {
+            WindowEvent::CloseRequested
+            | WindowEvent::KeyboardInput {
+                input:
+                    KeyboardInput {
+                        state: ElementState::Pressed,
+                        virtual_keycode: Some(VirtualKeyCode::Escape),
+                        ..
+                    },
+                ..
+            } => *control_flow = ControlFlow::Exit,
+            WindowEvent::Resized(size) => {
+                // Reconfigure the surface with the new size
+                config.width = size.width;
+                config.height = size.height;
+                surface.configure(&device, &config);
+
+                // Update the renderer's internal viewport
+                renderer.resize(uvec2(size.width, size.height));
+
+                // On macos the window needs to be redrawn manually after resizing
+                window.request_redraw();
+            }
+            _ => scene_ctrl.interact(&window, event, &renderer.camera),
+        },
+        Event::MainEventsCleared => {
+            // RedrawRequested will only trigger once, unless we manually
+            // request it.
+            window.request_redraw();
+        }
+        _ => {}
     });
     Ok(())
 }

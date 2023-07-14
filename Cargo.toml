@@ -9,8 +9,8 @@ edition = "2021"
 anyhow = "1.0.71"
 bytes = "1.4.0"
 console_error_panic_hook = "0.1.7"
-glam = "0.22"
-inox2d = { version = "0.1.0", default-features = false, features = ["wgpu"] }
+glam = "0.24.1"
+inox2d = {git = "https://github.com/adryzz/inox2d.git", branch = "weird-shit", default-features = false, features = ["wgpu"]}
 log = "0.4.19"
 reqwest = "0.11.18"
 wasm-bindgen = "0.2.87"
